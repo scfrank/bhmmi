@@ -17,7 +17,7 @@ python setup_hasrng.py build_ext --inplace
 python setup_BhmmI.py build_ext --inplace
 ```
 
-The model is then run from the run_bhmmi.py script. This script
+The model is then run from the `run_bhmmi.py` script. This script
 specifies the parameters input to the BHMM-I model, like number of
 iterations and hyperparameter values. It should be self explanatory;
 the arguments match the python arguments below, plus a
@@ -28,7 +28,7 @@ samplehyperparameters (boolean) argument.
 
 Much much slower! Also does not do hyperparameter estimation.
 
-To run, do "python BhmmI_py.py -h" in a commandline (you'll then see the
+To run, do `python BhmmI_py.py -h` in a commandline (you'll then see the
 commandline arguments):
 
 ```
@@ -74,15 +74,24 @@ current sentence type (e.g D, Q, but it doesn't matter what strings
 you use); the second encodes the true part of speech tags, and the
 third has the word tokens (lowercased and otherwise tokenised).
 Between each utterance there are two lines of boundary markers (the
-XXXs).
+`XXX`s).
 
-The output format  of the X.tag is nearly the same, except that each
+The output format  of the `X.tag` is nearly the same, except that each
 line has four columns:
-STYPE INFERRED_TAG_ID word TRUE_TAG
+
+`STYPE INFERRED_TAG_ID word TRUE_TAG`
+
 The first and third columns should match in input and output. The
 second column contains the cluster ids found by the sampler, and the
 fourth column should match the true tags in the second column of the
 input.
+
+##Output files
+- `[out].tag` contains the tags as inferred in the last iteration, as described
+above.
+- `[out].state` contains final hyperparameter values and counts (model state).
+- `[out].vm` contains the final VM score, as well as a confusion matrix of
+  inferred tags vs gold tags.
 
 
 #Code details:
