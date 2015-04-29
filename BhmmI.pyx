@@ -352,6 +352,68 @@ class BHMMI:
 
         return (extras0, extras1, extras2, extras3, extras4, extras5)
 
+    def test(self, words_test, stypes_test):
+        """ Given an inferred bhmmi (i.e. parameters/counts), tag
+        words_test.
+        Out of vocabulary words are tagged based on their tag context
+        (transition probability only, no em. prob)."""
+        assert len(words_test) == len(stypes_test)
+        tags_test = []
+        for i in range(len(words_test)):
+            if words_test[i] ==  0: # boundary (don't tag boundaries)
+                tags_test.append(0) # add boundary tag
+            else:
+                y_test = self.sample_y_test(
+                        words_test[i],
+                        stypes_test[i-1],
+                        tags_test[-1], # prev tag
+                        tags_test[-2] # prev-1 tag (trigram)
+                        )
+                tags_test.append(y_test)
+
+        assert len(words_test) == len(tags_test)
+        return tags_test
+
+    def sample_y_test(self, w, sm1, tm1, tm2):
+        """ Sample a tag y for word w in context (s,tm2,tm1) or (s,tm1) if
+        bigram model."""
+
+        cdef list probs = [0.0] * self.K # value for y=Boundary
+        cdef DTYPE_t sum_probs = 0
+
+        cdef DTYPE_t prob = 1
+        for y in range(self.K): # over tags
+            prob = 1
+            if y > 0:
+                if w >= self.V: # w is OOV, don't use emission dist.
+                    pass
+                else: # emission prob
+                    prob *= dir_prob(self.emissions[y, w],
+                            self.y_sums[y], self.V, self.beta[y])
+                # note: only use past history (not all trigrams, as when Gibbs
+                # sampling)
+                if self.trigram:
+                    prob *= dir_prob(
+                                self.tri_trans[sm1, tm2, tm1, y],
+                                self.bi_trans[sm1, tm1, y],
+                                self.K, self.alpha)
+                else:
+                    sum_y = 0 # is not self.y_sums?? - no,b/c sm1
+                    for w in range(self.bi_trans.shape[2]):
+                        sum_y += self.bi_trans[sm1, tm1, w]
+                    prob *=  dir_prob(self.bi_trans[sm1, tm1, y],
+                                sum_y, self.K, self.alpha)
+
+                probs[y] = prob
+                sum_probs += prob
+                assert prob > 0, "Zero prob/underflow? at w: %d, tag y %d,\
+                                      prob %f" % (w, y, prob)
+
+        new_y = self.rng.rng_draw(probs, sum_probs)
+        return new_y
+
+
+
     def log_prob_old(self):
         """ Unused: Returns the log posterior probability of the current state
         of the model. Must match log_prob() below (which is much faster). """
@@ -439,7 +501,6 @@ class BHMMI:
         lp_ems += lgamma(beta_y * V) -  lgamma(sum_y + (beta_y * V))
 
         return lp_ems
-
 
     def log_prob_trans_alpha_gamma(self, DTYPE_t alpha):
         """ P(Y | alpha ) = probability of tag sequence given alpha. """
@@ -592,8 +653,8 @@ class BHMMI:
         for s in stype_ids.keys():
             rev_stype_ids[stype_ids[s]] = s
         rev_tag_ids = {}
-        for s in truetag_ids.keys():
-            rev_tag_ids[truetag_ids[s]] = s
+        for t in truetag_ids.keys():
+            rev_tag_ids[truetag_ids[t]] = t
         rev_word_ids = {}
         for w in word_ids.keys():
             rev_word_ids[word_ids[w]] = w
@@ -606,6 +667,34 @@ class BHMMI:
             else:
                 outf.write("%s\t%s\t%s\n" % (rev_stype_ids[self.S[i]],
                         self.Y[i], rev_word_ids[self.X[i]]))
+
+    def output_test(self, tags_test, words_test, stypes_test, truetags_test,
+        id_dicts, output_name):
+        word_ids, truetag_ids, stype_ids = id_dicts
+        assert len(tags_test) == len(words_test)
+        outf = open(output_name+".testtags" , "w")
+        rev_stype_ids = {}
+        for s in stype_ids.keys():
+            rev_stype_ids[stype_ids[s]] = s
+        rev_tag_ids = {}
+        for t in truetag_ids.keys():
+            rev_tag_ids[truetag_ids[t]] = t
+        rev_word_ids = {}
+        for w in word_ids.keys():
+            rev_word_ids[word_ids[w]] = w
+
+        for i in range(len(tags_test)):
+            if truetags_test:
+                outf.write("%s\t%s\t%s\t%s\n" % (
+                        rev_stype_ids[stypes_test[i]],
+                        tags_test[i],
+                        rev_word_ids[words_test[i]],
+                        rev_tag_ids[truetags_test[i]]))
+            else:
+                outf.write("%s\t%s\t%s\t%s\n" % (
+                        rev_stype_ids[stypes_test[i]],
+                        tags_test[i],
+                        rev_word_ids[words_test[i]]))
 
     def evaluate_vm(self, output_name=None):
         assert self.truetags is not None, "Must have true tags to evaluate!"
@@ -667,6 +756,42 @@ def run_sampler(input_file, initialisation, iterations, anneal, randomseed,
 
     bhmmi.output_state(output_name, word_ids, tag_ids, stype_ids)
 
+    id_dicts = (word_ids, tag_ids, stype_ids)
+    return (bhmmi, id_dicts)
+
+def run_test(bhmmi, test_filename, id_dicts, output_name):
+    words_test, stypes_test, truetags_test, id_dicts = read_testinput(test_filename, id_dicts)
+    tags = bhmmi.test(words_test, stypes_test)
+    bhmmi.output_test(tags, words_test, stypes_test, truetags_test,
+                      id_dicts, output_name)
+
+def read_testinput(test_filename, id_dicts):
+    testlines = []
+    word_ids, truetag_ids, stype_ids = id_dicts
+    firstline = True
+    for line in open(test_filename):
+        stype_str, truetag_str, word_str = line.split()
+        # First lines must be sentence-breaks (XXX) so they have lowest ids.
+        if firstline:
+            assert stype_str == "XXX"
+            assert truetag_str == "XXX"
+            assert word_str == "xxx"
+            firstline = False
+        stype = stype_ids.setdefault(stype_str, len(stype_ids))
+        truetag = truetag_ids.setdefault(truetag_str, len(truetag_ids))
+        #word = word_ids.setdefault(word_str, len(word_ids))
+        # Adding '-OOV' to wordstr if it was unseen in training
+        if word_str not in word_ids:
+            word_ids[word_str + "-OOV"] = len(word_ids)
+            word = word_ids[word_str + "-OOV"]
+        else:
+            word = word_ids[word_str]
+        testlines.append([stype,truetag,word])
+
+    stypes_test, truetags_test, words_test = zip(*testlines)
+    id_dicts = word_ids, truetag_ids, stype_ids
+    return words_test, stypes_test, truetags_test, id_dicts
+
 def read_input(filename):
     inputlines = []
     word_ids = {}
@@ -688,7 +813,21 @@ def read_input(filename):
     stypes, truetags, words= zip(*inputlines)
     return words, stypes, truetags, word_ids, truetag_ids, stype_ids
 
-def main():
+def main(input_file, initialisation="random",
+        iterations=100, anneal=False, randomseed=None, trigram=False,
+        alpha=0.001, beta=0.001,
+        samplehyperparameters=False,
+        output_name="out.bhmmi", test_file="", num_testsamples=10):
+
+    bhmmi, id_dicts = run_sampler(input_file, initialisation, iterations, anneal,
+            randomseed, trigram, alpha, beta, samplehyperparameters,
+            output_name)
+
+    if test_file:
+        for t in range(num_testsamples):
+            run_test(bhmmi, test_file, id_dicts, "%s.%d" % (output_name, t))
+
+def main_args():
     parser = argparse.ArgumentParser(description="BHMM-I Gibbs sampler")
     parser.add_argument("--randomseed", "-R", type=int, default=None)
     parser.add_argument("--anneal", "-A", action="store_true")
@@ -699,13 +838,16 @@ def main():
     parser.add_argument("--beta", "-b", type=float, default=0.001)
     parser.add_argument("--samplehyperparameters", "-H", action="store_true")
     parser.add_argument("--output", "-o", type=str, default="out.bhmmi")
+    parser.add_argument("--test_file", "-T", type=str)
+    parser.add_argument("--num_testsamples", "-t", type=int, default=1)
     parser.add_argument('input_file', type=str)
     args = parser.parse_args()
 
-    run_sampler(args.input_file, args.initialisation, args.iterations,
+    main(args.input_file, args.initialisation, args.iterations,
             args.anneal, args.randomseed, args.trigram,
             args.alpha, args.beta, args.samplehyperparameters,
-            args.output)
+            args.output, args.test_file, args.num_testsamples)
+
 
 if __name__ == "__main__":
     main()

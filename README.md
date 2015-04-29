@@ -52,7 +52,9 @@ optional arguments:
   --alpha ALPHA, -a ALPHA   Value for alpha (transition) hyperparameter
   --beta BETA, -b BETA      Value for beta (emission) hyperparameter
   --output OUTPUT, -o OUTPUT  Filename to write output to
-```
+  --test_file FILENAME, -T FILENAME Filename for testing
+  --num_testsamples NUM_TESTSAMPLES, -t NUM_TESTSAMPLES (default 1)
+
 
 #Input/output format:
   The input should be a file formatted like this (see testfile for an example):
@@ -93,6 +95,25 @@ above.
 - `[out].vm` contains the final VM score, as well as a confusion matrix of
   inferred tags vs gold tags.
 
+##Testing
+It is now possible to tag a separate test file after having inferred a
+BHMMI from the training/input data, by specifying a test_file (with
+the `-T` flag/`test_file` argument in `run_bhmmi.py`).  The test file
+should be in the input format described above; tagged output will be
+written to `X.testtag`.
+
+
+The `-t`/`num_testsamples` argument specifies how often the model is
+run over the test set (since the model is stochastic, each run will
+result in a different sample from the model's current state). These
+will be written to `X.0.testtag` etc.
+
+Out-of-vocabulary words (unseen in training) are tagged using only the
+transition distribution (tag context); this is in effect positing a uniform
+emission distribution.
+
+All sentence types in the test set must also be present in the
+training set.
 
 #Code details:
 

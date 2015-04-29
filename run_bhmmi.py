@@ -9,7 +9,7 @@ if __name__ == "__main__":
 
     profiling = False
 
-    input_file = "testfile"
+    input_file = "trainfile"
 
     initialisation = "random"
     iterations = 50
@@ -20,11 +20,13 @@ if __name__ == "__main__":
     output = "out.bhmmi"
     samplehyperparameters = True
     randomseed = None
+    testfile="testfile"
 
     if not profiling:
         # skips BhmmI.main() and argparse arguments
-        BhmmI.run_sampler(input_file, initialisation, iterations,
-            anneal, randomseed, trigram, alpha, beta, samplehyperparameters, output)
+        BhmmI.main(input_file, initialisation, iterations,
+            anneal, randomseed, trigram, alpha, beta, samplehyperparameters,
+            output, testfile)
     else:
         randomseed = 26
         s = "BhmmI.run_sampler(input_file, initialisation, iterations, anneal, randomseed, trigram, alpha, beta, samplehyperparameters, output)"
