@@ -54,7 +54,7 @@ optional arguments:
   --output OUTPUT, -o OUTPUT  Filename to write output to
   --test_file FILENAME, -T FILENAME Filename for testing
   --num_testsamples NUM_TESTSAMPLES, -t NUM_TESTSAMPLES (default 1)
-
+```
 
 #Input/output format:
   The input should be a file formatted like this (see testfile for an example):
@@ -101,7 +101,6 @@ BHMMI from the training/input data, by specifying a test_file (with
 the `-T` flag/`test_file` argument in `run_bhmmi.py`).  The test file
 should be in the input format described above; tagged output will be
 written to `X.testtag`.
-
 
 The `-t`/`num_testsamples` argument specifies how often the model is
 run over the test set (since the model is stochastic, each run will
